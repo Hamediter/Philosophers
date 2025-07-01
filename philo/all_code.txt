@@ -1,0 +1,536 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   main.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ahmed <ahmed@student.42.fr>                +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/06/27 17:59:35 by aboutale          #+#    #+#             */
+/*   Updated: 2025/06/29 17:01:35 by ahmed            ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "philosophers.h"
+
+int	main(int argc, char **argv)
+{
+	t_data	data;
+	t_philo	*philo = NULL;
+	pthread_t monitor_thread;
+
+
+	if (argc == 5 || argc == 6)
+	{
+		input_parse(&data, argv);
+		philo = protect_malloc(sizeof(t_philo) * data.nb_philo);
+		if (!philo)
+			return (1);
+		data.philos = philo;	
+		if (init_mutex(&data) != 0)
+			return (1);
+		data.start_time = get_time();
+		printf("DEBUG: start_time = %ld\n", data.start_time);
+		init_philo(&data, philo);
+		create_philo(&data, philo);
+		pthread_create(&monitor_thread, NULL, monitoring, &data);
+		wait_for_philo(&data, philo);
+		pthread_join(monitor_thread, NULL);
+	}
+	else
+		printf("error wrong input\n");
+	return (0);
+}
+
+#include "philosophers.h"
+
+void	input_parse(t_data *data, char **argv)
+{
+	data->nb_philo = ft_atol(argv[1]);
+	data->time_to_die = ft_atol(argv[2]) * 1000;
+	data->time_to_eat = ft_atol(argv[3]) * 1000;
+	data->time_to_sleep = ft_atol(argv[4]) * 1000;
+	data->start_time = 0;
+	data->is_dead = false;
+	if (argv[5])
+		data->limits_meal = ft_atol(argv[5]);
+	else
+		data->limits_meal = -1;
+}
+
+int	init_mutex(t_data *data)
+{
+	int	i;
+
+	i = 0;
+	pthread_mutex_init(&data->dead_lock, NULL);
+	pthread_mutex_init(&data->dead_lock, NULL);
+	data->forks = protect_malloc(sizeof(pthread_mutex_t) * data->nb_philo);
+	if (data->forks == NULL)
+		return (1);
+	pthread_mutex_init(&data->print_lock, NULL);
+	while (i < data->nb_philo)
+	{
+		pthread_mutex_init(&data->philos[i].last_meal_mutex, NULL);
+		pthread_mutex_init(&data->forks[i], NULL);
+		i++;
+
+	}
+	return (0);
+}
+
+void	init_philo(t_data *data, t_philo *philo)
+{
+	int	i;
+
+	i = 0;
+
+	while (i < data->nb_philo)
+	{
+		philo[i].id = i +1;
+		philo[i].meals = 0;
+		philo[i].last_meal = data->start_time;
+		printf("DEBUG: Philo %d, initial last_meal = %ld\n", i + 1, philo[i].last_meal); // <-- AJOUTER
+		philo[i].left_fork = &data->forks[i];
+		philo[i].right_fork = &data->forks[(i + 1) % data->nb_philo];
+		philo[i].has_fork = false;
+		philo[i].data = data;
+		i++;
+	}
+}
+
+void	create_philo(t_data *data, t_philo *philo)
+{
+	int	i;
+
+	i = 0;
+
+	while (i < data->nb_philo)
+	{
+		pthread_create(&philo[i].thread_id, NULL, philo_routine, &philo[i]);
+		i++;
+	}
+
+}
+
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   philo.c                                            :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: aboutale <marvin@42.fr>                    +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/06/30 18:16:25 by aboutale          #+#    #+#             */
+/*   Updated: 2025/06/30 18:16:26 by aboutale         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "philosophers.h"
+
+void *philo_routine(void *arg)
+{
+	t_philo *philo = (t_philo *)arg;
+
+/* 	if (!philo->left_fork || !philo->right_fork)
+    {
+       	 printf("Error: Philosopher %d has NULL fork pointer\n", philo->id);
+       	 return NULL;
+    } */
+ /*     if (philo->data->nb_philo == 1)
+    {
+        pthread_mutex_lock(philo->left_fork);
+        print_status(philo, "has taken a fork");
+        usleep(philo->data->time_to_die*1000); // On attend qu'il meure
+        // Il n'y a pas besoin de print_status("died") ici, le moniteur s'en chargera
+        pthread_mutex_unlock(philo->left_fork);
+        return (NULL);
+    } */
+	if (philo->id % 2 == 0)
+        usleep(1000); 
+	while(1)
+	{
+		/* if (philo->data->is_dead)
+            break ;
+		if (philo->id % 2 == 0)
+		{
+			pthread_mutex_lock(philo->left_fork);
+			philo->has_fork = true;
+			print_status(philo, "has taken a fork");
+			pthread_mutex_lock(philo->right_fork);
+			print_status(philo, "has taken a fork");
+		}
+		else
+		{
+			pthread_mutex_lock(philo->right_fork);
+			print_status(philo, "has taken a fork");
+			philo->has_fork = true;
+			pthread_mutex_lock(philo->left_fork);
+			print_status(philo, "has taken a fork");
+		} */
+		
+        pthread_mutex_lock(&philo->data->dead_lock);
+        if (philo->data->is_dead)
+        {
+            pthread_mutex_unlock(&philo->data->dead_lock);
+            break; // Sortir si la simulation est terminée
+        }
+        pthread_mutex_unlock(&philo->data->dead_lock);
+	 	if (philo->data->is_dead) // vérifier avant de commencer à manger
+        {
+            pthread_mutex_unlock(philo->left_fork);
+            pthread_mutex_unlock(philo->right_fork);
+            break;
+        }
+		if (philo->id % 2 == 0)
+		{
+			pthread_mutex_lock(philo->left_fork);
+			philo->has_fork = true;
+			print_status(philo, "has taken a fork");
+			pthread_mutex_lock(philo->right_fork);
+			print_status(philo, "has taken a fork");
+		}
+		else
+		{
+			pthread_mutex_lock(philo->right_fork);
+			print_status(philo, "has taken a fork");
+			philo->has_fork = true;
+			pthread_mutex_lock(philo->left_fork);
+			print_status(philo, "has taken a fork");
+		} 
+		print_status(philo, "is eating");
+		pthread_mutex_lock(&philo->last_meal_mutex);
+		philo->last_meal = get_time();
+		philo->meals++;
+		pthread_mutex_unlock(&philo->last_meal_mutex);
+		usleep(philo->data->time_to_eat);
+		pthread_mutex_unlock(philo->left_fork);
+		pthread_mutex_unlock(philo->right_fork);
+		if (philo->data->is_dead)
+			break ;
+		print_status(philo, "is thinking");
+		if (philo->data->limits_meal != -1 && philo->meals >= philo->data->limits_meal)
+			break ;
+		print_status(philo, "is sleeping");
+		usleep(philo->data->time_to_sleep);
+		usleep(500);
+		if (philo->data->is_dead)
+            break;
+		//lacher fourchette et liberer la memoire 
+	}
+
+	return (NULL);
+}
+
+void	wait_for_philo(t_data *data, t_philo *philo)
+{
+	int	i;
+
+	i = 0;
+
+	while (i < data->nb_philo)
+	{
+		pthread_join(philo[i].thread_id, NULL);
+		i++;
+	}
+
+}
+
+void	detroy_mutex(t_data *data)
+{
+	int	i;
+
+	i = 0;
+	while (i < data->nb_philo)
+	{
+		pthread_mutex_destroy(data->forks);
+		i++;
+
+	}
+	pthread_mutex_destroy(&data->print_lock);
+
+}
+
+void *monitoring(void *arg)
+{
+    t_data  *data;
+    int     i;
+    int     all_philos_have_eaten;
+
+    data = (t_data *)arg;
+    while (1) // Boucle infinie, on sortira de l'intérieur.
+    {
+        all_philos_have_eaten = 1; // Supposons que tout le monde a mangé.
+        i = -1;
+        while (++i < data->nb_philo)
+        {
+            pthread_mutex_lock(&data->philos[i].last_meal_mutex);
+            // Vérification de la mort
+            if (get_time() - data->philos[i].last_meal > data->time_to_die)
+            {
+                // Mettre fin à la simulation.
+                pthread_mutex_unlock(&data->philos[i].last_meal_mutex); // Libérer avant de prendre le suivant.
+                
+                pthread_mutex_lock(&data->dead_lock);
+                data->is_dead = 1;
+                pthread_mutex_unlock(&data->dead_lock);
+
+                print_status(&data->philos[i], "died");
+                return (NULL); // Le moniteur a fini son travail.
+            }
+            // Vérification du nombre de repas (si l'option est active).
+            if (data->limits_meal != -1 && data->philos[i].meals < data->limits_meal)
+                all_philos_have_eaten = 0; // Au moins un n'a pas fini de manger.
+            pthread_mutex_unlock(&data->philos[i].last_meal_mutex);
+        }
+
+        // Si l'option des repas est active et que tout le monde a mangé.
+        if (data->limits_meal != -1 && all_philos_have_eaten)
+        {
+            pthread_mutex_lock(&data->dead_lock);
+            data->is_dead = 1; // Terminer la simulation.
+            pthread_mutex_unlock(&data->dead_lock);
+            return (NULL);
+        }
+        usleep(1000); // Petite pause pour ne pas surcharger le CPU.
+    }
+    return (NULL);
+}
+/* 
+void	*monitoring(void *arg)
+{
+	int	i;
+	t_data *data;
+	int	all_ate;
+	long	last_meal;
+
+	data = (t_data*)arg;
+	while(1)
+	{
+		i = 0;
+		all_ate = 1;
+		while(i < data->nb_philo)
+		{
+			pthread_mutex_lock(&data->philos[i].last_meal_mutex);
+			//pthread_mutex_lock(data->time_to_die);
+			last_meal = data->philos[i].last_meal;
+			 if (data->limits_meal != -1 && data->philos[i].meals < data->limits_meal)
+			 {
+				all_ate =0;
+				pthread_mutex_unlock(&data->philos[i].last_meal_mutex);
+
+			 }
+			if (get_time() - last_meal >= data->time_to_die)
+			{
+				print_status(&data->philos[i], "died");
+				pthread_mutex_lock(&data->dead_lock);
+				data->is_dead = true;
+				pthread_mutex_unlock(&data->dead_lock);
+				return NULL;
+			}
+			i++;
+		}
+		pthread_mutex_lock(&data->dead_lock);
+		if (data->is_dead) // Vérifier si un autre thread a mis fin à la simulation
+       	{
+           	pthread_mutex_unlock(&data->dead_lock);
+            break;
+        }
+        pthread_mutex_unlock(&data->dead_lock);
+		 	if (data->limits_meal != -1 && data->philos[i].meals < data->limits_meal)
+			{
+				all_ate = 0;
+			} 
+	
+		if (all_ate && data->limits_meal != -1)
+		{
+			pthread_mutex_lock(&data->dead_lock);
+            data->is_dead = true;
+			pthread_mutex_unlock(&data->dead_lock);
+            break;
+		}
+		usleep(1000);
+	}
+	return (NULL);
+} */
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   utils.c                                            :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: aboutale <marvin@42.fr>                    +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/06/30 18:29:44 by aboutale          #+#    #+#             */
+/*   Updated: 2025/06/30 18:29:47 by aboutale         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#include "philosophers.h"
+
+long	ft_atol(const char *str)
+{
+	long long	result;
+	int			sign;
+
+	result = 0;
+	sign = 1;
+	if (!str)
+		return (-1);
+	while ((*str >= 9 && *str <= 13) || *str == ' ')
+		str++;
+	if (*str == '-' || *str == '+')
+	{
+		if (*str == '-')
+			sign = -1;
+		str++;
+	}
+	if (!(*str >= '0' && *str <= '9'))
+		return (-1);
+	while (*str >= '0' && *str <= '9')
+	{
+		result = result * 10 + (*str - '0');
+		if ((sign == 1 && result > LONG_MAX)
+			|| (sign == -1 && -result < LONG_MIN))
+			return (-1);
+		str++;
+	}
+	if (*str != '\0')
+		return (-1);
+	return (long)(result * sign);
+}
+
+long	get_time(void)
+{
+	struct timeval tv;
+
+	gettimeofday(&tv, NULL);
+	return ((tv.tv_sec * 1000) + (tv.tv_usec / 1000));
+}
+
+
+void	print_status(t_philo *philo, char *msg)
+{
+	long	time;
+    int is_dead_flag;
+
+	pthread_mutex_lock(&philo->data->print_lock);
+
+    // Verrouiller dead_lock pour lire la variable is_dead en toute sécurité
+    pthread_mutex_lock(&philo->data->dead_lock);
+    is_dead_flag = philo->data->is_dead;
+    pthread_mutex_unlock(&philo->data->dead_lock);
+
+    // Si un philo est mort, on n'imprime plus rien SAUF le message de mort lui-même.
+	if (is_dead_flag && strcmp(msg, "died") != 0)
+    {
+        pthread_mutex_unlock(&philo->data->print_lock);
+		return;
+    }
+
+	time = get_time() - philo->data->start_time;
+	printf("%ld %d %s\n", time, philo->id, msg);
+	pthread_mutex_unlock(&philo->data->print_lock);
+}
+/* void	print_status(t_philo *philo, char *msg)
+{
+	long	time;
+
+	pthread_mutex_lock(&philo->data->print_lock);
+	if (philo->data->is_dead)
+		return;
+	time = get_time() - philo->data->start_time;
+	printf("%ld %d %s\n", time, philo->id, msg);
+	pthread_mutex_unlock(&philo->data->print_lock);
+
+} */
+
+void	*protect_malloc(size_t size)
+{
+	void	*ptr;
+
+	ptr = malloc(size);
+	if (ptr == NULL)
+	{
+		ft_putstr_fd("Error malloc", 2);
+		return (NULL);
+	}
+	return (ptr);
+}
+
+void	ft_putstr_fd(char *s, int fd)
+{
+	if (!s)
+		return ;
+	while (*s)
+		write (fd, s++, 1);
+}
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   philosophers.h                                     :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ahmed <ahmed@student.42.fr>                +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/06/27 17:42:15 by aboutale          #+#    #+#             */
+/*   Updated: 2025/06/29 17:20:46 by ahmed            ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
+#ifndef PHILOSOPHERS_H
+# define PHILOSOPHERS_H
+
+# include <stdio.h>
+# include <unistd.h>
+# include <stdlib.h>
+# include <pthread.h>
+# include <limits.h>
+# include <sys/time.h>
+# include <stdbool.h>
+# include <string.h>
+
+typedef struct s_data t_data;
+typedef struct s_philo t_philo;
+
+typedef struct s_philo
+{
+	int				id;
+	long			meals;
+	long			last_meal;
+	bool			has_fork;
+	pthread_mutex_t	*left_fork;
+	pthread_mutex_t	*right_fork;
+	pthread_mutex_t	check_dead;
+	pthread_mutex_t last_meal_mutex;
+	pthread_t		thread_id;
+	t_data			*data;
+}	t_philo;
+
+
+typedef struct s_data
+{
+	long			nb_philo;
+	long			time_to_die;
+	long			time_to_eat;
+	long			time_to_sleep;
+	long			start_time;
+	long			limits_meal;
+	bool			is_dead;
+	t_philo			*philos;
+	pthread_mutex_t	*forks;
+	pthread_mutex_t	print_lock;
+	pthread_mutex_t dead_lock;
+}	t_data;
+
+
+void	input_parse(t_data *data, char **argv);
+void	*philo_routine(void *arg);
+long	ft_atol(const char *str);
+void	*protect_malloc(size_t size);
+void	print_status(t_philo *philo, char *msg);
+void	ft_putstr_fd(char *s, int fd);
+long	get_time(void);
+void	init_philo(t_data *data, t_philo *philo);
+int		init_mutex(t_data *data);
+void	create_philo(t_data *data, t_philo *philo);
+void	wait_for_philo(t_data *data, t_philo *philo);
+void	*monitoring(void *arg);
+
+#endif

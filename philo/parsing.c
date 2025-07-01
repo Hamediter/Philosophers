@@ -1,45 +1,75 @@
-
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   parsing.c                                          :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: ahmed <ahmed@student.42.fr>                +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2025/06/27 17:42:15 by aboutale          #+#    #+#             */
+/*   Updated: 2025/06/29 17:20:46 by ahmed            ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
 #include "philosophers.h"
 
-long	ft_atol(const char *str)
+void	input_parse(t_data *data, char **argv)
 {
-	long long	result = 0;
-	int			sign = 1;
-
-	if (!str)
-		return (-1);
-	while ((*str >= 9 && *str <= 13) || *str == ' ')
-		str++;
-	if (*str == '-' || *str == '+')
-	{
-		if (*str == '-')
-			sign = -1;
-		str++;
-	}
-	if (!(*str >= '0' && *str <= '9'))
-		return (-1);
-	while (*str >= '0' && *str <= '9')
-	{
-		result = result * 10 + (*str - '0');
-		if ((sign == 1 && result > LONG_MAX)
-			|| (sign == -1 && -result < LONG_MIN))
-			return (-1);
-		str++;
-	}
-	if (*str != '\0')
-		return (-1);
-	return (long)(result * sign);
+	data->nb_philo = ft_atol(argv[1]);
+	data->time_to_die = ft_atol(argv[2]);
+	data->time_to_eat = ft_atol(argv[3]);
+	data->time_to_sleep = ft_atol(argv[4]);
+	data->start_time = 0;
+	data->is_dead = false;
+	if (argv[5])
+		data->limits_meal = ft_atol(argv[5]);
+	else
+		data->limits_meal = -1;
 }
 
-
-void    input_parse(t_data *data, char **argv)
+int	init_mutex(t_data *data)
 {
-    data->nb_philo = ft_atol(argv[1]);
-    data->time_to_die = ft_atol(argv[2]) * 1000;
-    data->time_to_eat = ft_atol(argv[3]) * 1000;
-    data->time_to_sleep = ft_atol(argv[4]) * 1000;
-    if (argv[5])
-        data->limits_meal = ft_atol(argv[5]);
-    else 
-        data->limits_meal = 0;
+	int	i;
+
+	i = 0;
+	pthread_mutex_init(&data->dead_lock, NULL);
+	data->forks = protect_malloc(sizeof(pthread_mutex_t) * data->nb_philo);
+	if (data->forks == NULL)
+		return (1);
+	pthread_mutex_init(&data->print_lock, NULL);
+	while (i < data->nb_philo)
+	{
+		pthread_mutex_init(&data->philos[i].last_meal_mutex, NULL);
+		pthread_mutex_init(&data->forks[i], NULL);
+		i++;
+	}
+	return (0);
+}
+
+void	init_philo(t_data *data, t_philo *philo)
+{
+	int	i;
+
+	i = 0;
+	while (i < data->nb_philo)
+	{
+		philo[i].id = i +1;
+		philo[i].meals = 0;
+		philo[i].last_meal = data->start_time;
+		philo[i].left_fork = &data->forks[i];
+		philo[i].right_fork = &data->forks[(i + 1) % data->nb_philo];
+		philo[i].has_fork = false;
+		philo[i].data = data;
+		i++;
+	}
+}
+
+void	create_philo(t_data *data, t_philo *philo)
+{
+	int	i;
+
+	i = 0;
+	while (i < data->nb_philo)
+	{
+		pthread_create(&philo[i].thread_id, NULL, philo_routine, &philo[i]);
+		i++;
+	}
 }
